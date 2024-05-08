@@ -1,4 +1,3 @@
-pip install Flask Flask-SQLAlchemy
 from flask import Flask, render_template, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 
@@ -6,15 +5,42 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///recipes.db'
 db = SQLAlchemy(app)
 
+# Define the association table for the many-to-many relationship
+recipe_category_association = db.Table('recipe_category',
+                                       db.Column('recipe_id', db.Integer, db.ForeignKey('recipe.id')),
+                                       db.Column('category_id', db.Integer, db.ForeignKey('category.id'))
+                                       )
+
 class Recipe(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
     ingredients = db.Column(db.String(500), nullable=False)
+    categories = db.relationship('Category', secondary=recipe_category_association, backref=db.backref('recipes', lazy='dynamic'))
+
+class Category(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)
+
+# Dummy data for categories
+categories = [
+    Category(name='Italian'),
+    Category(name='Mexican'),
+    Category(name='Asian'),
+    Category(name='Desserts'),
+]
+
+# Dummy data for recipes
+recipes = [
+    Recipe(title='Spaghetti Bolognese', ingredients='spaghetti, tomato sauce, ground beef', categories=[categories[0]]),
+    Recipe(title='Chicken Alfredo', ingredients='chicken, fettuccine, alfredo sauce', categories=[categories[0]]),
+    Recipe(title='Tacos', ingredients='tortillas, ground beef, lettuce, tomato', categories=[categories[1]]),
+    Recipe(title='Pad Thai', ingredients='rice noodles, shrimp, tofu, peanuts', categories=[categories[2]]),
+    Recipe(title='Chocolate Cake', ingredients='flour, sugar, cocoa powder, eggs', categories=[categories[3]]),
+]
 
 @app.route('/')
 def index():
-    recipes = Recipe.query.all()
-    return render_template('index.html', recipes=recipes)
+    return render_template('index.html', recipes=recipes, categories=categories)
 
 @app.route('/recipe/<int:recipe_id>')
 def recipe(recipe_id):
@@ -24,45 +50,38 @@ def recipe(recipe_id):
     else:
         return 'Recipe not found', 404
 
-@app.route('/add_recipe', methods=['GET', 'POST'])
-def add_recipe():
-    if request.method == 'POST':
-        title = request.form['title']
-        ingredients = request.form['ingredients']
-
-        if title and ingredients:
-            new_recipe = Recipe(title=title, ingredients=ingredients)
-            db.session.add(new_recipe)
-            db.session.commit()
-            return redirect(url_for('index'))
-
-    return render_template('add_recipe.html')
-
 if __name__ == '__main__':
     db.create_all()
     app.run(debug=True)
 <!-- ... (unchanged) ... -->
-<!-- ... (unchanged) ... -->
+<h2>Categories</h2>
+<ul>
+    {% for category in categories %}
+        <li><a href="{{ url_for('category', category_id=category.id) }}">{{ category.name }}</a></li>
+    {% endfor %}
+</ul>
+@app.route('/category/<int:category_id>')
+def category(category_id):
+    category = Category.query.get(category_id)
+    if category:
+        return render_template('category.html', category=category)
+    else:
+        return 'Category not found', 404
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Recipe</title>
+    <title>{{ category.name }} Recipes</title>
 </head>
 <body>
-    <h1>Add Recipe</h1>
-    <form method="POST" action="{{ url_for('add_recipe') }}">
-        <label for="title">Title:</label>
-        <input type="text" id="title" name="title" required>
-        <br>
-        <label for="ingredients">Ingredients:</label>
-        <textarea id="ingredients" name="ingredients" required></textarea>
-        <br>
-        <input type="submit" value="Add Recipe">
-    </form>
-    <a href="{{ url_for('index') }}">Back to Recipes</a>
+    <h1>{{ category.name }} Recipes</h1>
+    <ul>
+        {% for recipe in category.recipes %}
+            <li><a href="{{ url_for('recipe', recipe_id=recipe.id) }}">{{ recipe.title }}</a></li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('index') }}">Back to Home</a>
 </body>
 </html>
-python app.py
